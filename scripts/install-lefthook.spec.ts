@@ -219,6 +219,7 @@ describe('worktree-local Lefthook installer', { timeout: 90_000 }, () => {
   for (const [label, extraEnv] of [
     ['CI', { CI: 'true' }],
     ['GitHub Actions', { GITHUB_ACTIONS: 'true' }],
+    ['Render', { RENDER: 'true' }],
   ] satisfies [string, NodeJS.ProcessEnv][]) {
     it(`skips hook installation when ${label} marks an automated job`, async () => {
       const fixture = createFixture()
