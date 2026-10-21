@@ -1,0 +1,38 @@
+# Example Cordis patch for the DSH `web` profile.
+# Copy this into your Harness home as cordis.patch.yml, or pass it with:
+#   pnpm dsh --profile web --patch packages/experimental/dsh-rails/profile.patch.yml
+#
+# On Render, place the rendered config (with real URLs and keys) in the
+# DSH_HOME directory or inject it through the service environment.
+
+# Use Kimi K3 (Moonshot) as the default model and expose its route through pi-ai.
+- id: agent-default-model
+  config:
+    provider: moonshotai
+    model: kimi-k3
+
+- id: llm-pi-ai
+  config:
+    providers:
+      moonshotai:
+        apiKeyEnv: KIMI_K3_API_KEY
+
+- insert:
+    - id: rails
+      name: '@deepseek-ai/dsh-rails'
+      config:
+        workRoot: !!js process.env.DSH_RAILS_WORK_ROOT || '/tmp/dsh-rails'
+        repos:
+          - id: rails-template
+            name: Rails Template
+            githubUrl: https://github.com/WeBuddhist/rails-template.git
+            description: Reference Rails vault with all skills
+          - id: 21-taras
+            name: 21 Taras Rails
+            githubUrl: https://github.com/WeBuddhist/21-taras-rails.git
+          - id: buddhist-stories
+            name: Buddhist Stories Rails
+            githubUrl: https://github.com/WeBuddhist/Buddhist-Stories-rails.git
+          - id: nalanda-texts
+            name: Nalanda Texts Rails
+            githubUrl: https://github.com/WeBuddhist/Nalanda-texts-rails.git

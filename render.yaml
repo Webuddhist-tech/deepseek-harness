@@ -1,0 +1,37 @@
+# Render Blueprint for deploying DeepSeek Harness with the Rails plugin.
+#
+# To deploy:
+#   1. Push this file to your Git repository.
+#   2. In the Render dashboard choose "Blueprints" → "New Blueprint Instance".
+#   3. Select the repository and branch.
+#   4. Fill in the secret env vars when prompted:
+#      - DEEPSEEK_API_KEY  (or another model provider key DSH is configured to use)
+#      - GEMINI_API_KEY    (required by Rails segmentation scripts)
+#
+# The persistent disk is mounted at /var. Both DSH_HOME and DSH_RAILS_WORK_ROOT
+# live under it so sessions and cloned Rails repos survive restarts.
+
+services:
+  - type: web
+    name: rails-dsh
+    runtime: node
+    region: oregon
+    plan: standard
+    buildCommand: pnpm install && pnpm run build
+    startCommand: bash packages/experimental/dsh-rails/render-start.sh
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: '22'
+      - key: DSH_HOME
+        value: /var/dsh-home
+      - key: DSH_RAILS_WORK_ROOT
+        value: /var/dsh-rails
+      - key: KIMI_K3_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+    disk:
+      name: dsh-rails-data
+      mountPath: /var
+      sizeGB: 10
