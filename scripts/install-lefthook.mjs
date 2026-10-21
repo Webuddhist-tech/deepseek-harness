@@ -635,6 +635,13 @@ async function main() {
   const commonOutput = stripGitLineTerminator(git(['rev-parse', '--git-common-dir'], root).stdout)
   const commonDirectory = isAbsolute(commonOutput) ? commonOutput : resolve(root, commonOutput)
   const commonConfigPath = join(commonDirectory, 'config')
+  const commonConfigStat = lstatIfPresent(commonConfigPath)
+  if (commonConfigStat === undefined || !commonConfigStat.isFile() || commonConfigStat.isSymbolicLink()) {
+    console.warn(
+      `[install-lefthook] skipping hook installation because ${JSON.stringify(commonConfigPath)} is not a regular file`,
+    )
+    return
+  }
   const worktreeConfigPath = join(gitDirectory, 'config.worktree')
   const hooksPath = join(gitDirectory, HOOKS_DIRECTORY)
   const releaseLock = await acquireInstallLock(commonDirectory)

@@ -544,7 +544,7 @@ syncBuiltinESMExports()
     expect(existsSync(hooksPath(fixture, fixture.main))).toBe(false)
   })
 
-  it.skipIf(process.platform === 'win32')('refuses a symlinked common repository config before writing through it', async () => {
+  it.skipIf(process.platform === 'win32')('skips installation when the common repository config is not a regular file', async () => {
     const fixture = createFixture()
     const commonConfig = join(commonDirectory(fixture), 'config')
     const externalConfig = join(fixture.container, 'external-common.gitconfig')
@@ -554,8 +554,8 @@ syncBuiltinESMExports()
 
     const result = await runInstaller(fixture, fixture.main)
 
-    expect(result.status).toBe(1)
-    expect(result.stderr).toContain('common repository config')
+    expect(result.status).toBe(0)
+    expect(result.stderr).toContain('skipping hook installation')
     expect(result.stderr).toContain('not a regular file')
     expect(lstatSync(commonConfig).isSymbolicLink()).toBe(true)
     expect(readFileSync(externalConfig, 'utf8')).toBe(externalContent)
