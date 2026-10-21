@@ -19,7 +19,7 @@ services:
     plan: standard
     buildCommand: pnpm install && pnpm run build
     startCommand: bash packages/experimental/dsh-rails/render-start.sh
-    healthCheckPath: /
+    healthCheckPath: /healthz
     envVars:
       - key: NODE_VERSION
         value: '22'

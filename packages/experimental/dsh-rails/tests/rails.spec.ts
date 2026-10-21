@@ -7,6 +7,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { WebServer } from '@deepseek-ai/dsh-host-webserver'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import * as rails from '../src/index.js'
 
@@ -70,6 +71,27 @@ describe('dsh-rails', () => {
 
     expect(ctx.tools.get('rails_list_repos')).toBeDefined()
     expect(ctx.tools.get('rails_clone_repo')).toBeDefined()
+  })
+
+  it('registers a public health check route when webServer is available', async () => {
+    type Route = { kind: 'exact' | 'prefix'; path: string; handler: (req: unknown, res: { writeHead: (status: number) => void; end: (body: string) => void }) => void }
+    const register = vi.fn<(route: Route) => () => void>(() => () => {})
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(SkillRegistry)
+    ctx.provide('webServer', { register } as unknown as WebServer)
+    await ctx.plugin(rails, { repos: [] })
+
+    expect(register).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'exact',
+      path: '/healthz',
+    }))
+    const route = register.mock.calls[0]![0]
+    const res = { writeHead: vi.fn(), end: vi.fn() }
+    route.handler({}, res)
+    expect(res.writeHead).toHaveBeenCalledWith(200, { 'Content-Type': 'text/plain' })
+    expect(res.end).toHaveBeenCalledWith('ok')
   })
 
   it('lists configured repos', async () => {
