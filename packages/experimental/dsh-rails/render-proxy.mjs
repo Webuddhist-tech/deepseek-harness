@@ -53,6 +53,16 @@ const server = createServer((req, res) => {
   req.pipe(upstream)
 })
 
+// Render's port scan and health checks connect from outside the container; the
+// first connection from each address shows whether they arrive at all.
+const seenPeers = new Set()
+server.on('connection', (socket) => {
+  const address = socket.remoteAddress ?? 'unknown'
+  if (address === '127.0.0.1' || address === '::ffff:127.0.0.1' || seenPeers.has(address) || seenPeers.size >= 20) return
+  seenPeers.add(address)
+  console.log(`render-proxy: first connection from ${address}`)
+})
+
 server.on('upgrade', (req, socket, head) => {
   const upstream = connect(upstreamPort, upstreamHost, () => {
     const headerLines = []

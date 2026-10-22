@@ -2,8 +2,23 @@
 # Start DeepSeek Harness (web profile) on Render with the Rails plugin patch.
 set -euo pipefail
 
-export DSH_HOME="${DSH_HOME:-/var/dsh-home}"
-export DSH_RAILS_WORK_ROOT="${DSH_RAILS_WORK_ROOT:-/var/dsh-rails}"
+export DSH_HOME="${DSH_HOME:-/var/data/dsh-home}"
+export DSH_RAILS_WORK_ROOT="${DSH_RAILS_WORK_ROOT:-/var/data/dsh-rails}"
+
+# Render only routes to a port bound on 0.0.0.0, and DSH refuses wildcard
+# binds. DSH listens on loopback; render-proxy.mjs owns 0.0.0.0:$PORT. The
+# relay starts first so Render's port scan finds the port before DSH is ready;
+# it answers 502 until DSH listens.
+export PORT="${PORT:-10000}"
+export DSH_UPSTREAM_PORT="${DSH_UPSTREAM_PORT:-3080}"
+node packages/experimental/dsh-rails/render-proxy.mjs &
+PROXY_PID=$!
+DSH_PID=""
+
+stop() {
+  kill -TERM $DSH_PID "$PROXY_PID" 2>/dev/null || true
+}
+trap 'stop' TERM INT
 
 mkdir -p "$DSH_HOME/profiles/web"
 mkdir -p "$DSH_RAILS_WORK_ROOT"
@@ -14,11 +29,6 @@ pnpm dsh --profile web --help >/dev/null 2>&1 || true
 
 cp packages/experimental/dsh-rails/profile.patch.yml "$DSH_HOME/profiles/web/cordis.patch.yml"
 
-# Render only routes to a port bound on 0.0.0.0, and DSH refuses wildcard
-# binds. DSH listens on loopback; render-proxy.mjs owns 0.0.0.0:$PORT.
-export PORT="${PORT:-10000}"
-export DSH_UPSTREAM_PORT="${DSH_UPSTREAM_PORT:-3080}"
-
 # Admit the public onrender.com hostname through the /api Host/Origin fence
 # and print the public URL (with token) instead of the loopback one.
 DSH_ARGS=(--profile web --host 127.0.0.1 --port "$DSH_UPSTREAM_PORT" --no-open)
@@ -28,25 +38,11 @@ fi
 
 pnpm dsh "${DSH_ARGS[@]}" &
 DSH_PID=$!
-node packages/experimental/dsh-rails/render-proxy.mjs &
-PROXY_PID=$!
-
-# Print the listening sockets once DSH has had time to start, so the deploy
-# log shows what Render's port scan can see.
-(
-  sleep 60
-  if command -v ss >/dev/null 2>&1; then
-    echo "render-start: listening TCP sockets:"
-    ss -ltn
-  fi
-) &
-
-trap 'kill -TERM "$DSH_PID" "$PROXY_PID" 2>/dev/null || true' TERM INT
 
 # Exit as soon as either process stops so Render restarts the service.
 while kill -0 "$DSH_PID" 2>/dev/null && kill -0 "$PROXY_PID" 2>/dev/null; do
   sleep 2
 done
-kill -TERM "$DSH_PID" "$PROXY_PID" 2>/dev/null || true
+stop
 wait || true
 exit 1

@@ -8,8 +8,10 @@
 #      - DEEPSEEK_API_KEY  (or another model provider key DSH is configured to use)
 #      - GEMINI_API_KEY    (required by Rails segmentation scripts)
 #
-# The persistent disk is mounted at /var. Both DSH_HOME and DSH_RAILS_WORK_ROOT
-# live under it so sessions and cloned Rails repos survive restarts.
+# The persistent disk is mounted at /var/data, a standalone directory; mounting
+# it over /var would hide the system's own /var contents. Both DSH_HOME and
+# DSH_RAILS_WORK_ROOT live under it so sessions and cloned Rails repos survive
+# restarts.
 
 services:
   - type: web
@@ -24,14 +26,14 @@ services:
       - key: NODE_VERSION
         value: '22'
       - key: DSH_HOME
-        value: /var/dsh-home
+        value: /var/data/dsh-home
       - key: DSH_RAILS_WORK_ROOT
-        value: /var/dsh-rails
+        value: /var/data/dsh-rails
       - key: KIMI_K3_API_KEY
         sync: false
       - key: GEMINI_API_KEY
         sync: false
     disk:
       name: dsh-rails-data
-      mountPath: /var
+      mountPath: /var/data
       sizeGB: 10

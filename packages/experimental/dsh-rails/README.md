@@ -18,7 +18,7 @@ Mount the plugin in a DSH profile and configure the repositories you want to off
 ```yaml
 - name: '@deepseek-ai/dsh-rails'
   config:
-    workRoot: '/var/dsh-rails'
+    workRoot: '/var/data/dsh-rails'
     repos:
       - id: rails-template
         name: Rails Template
@@ -62,10 +62,10 @@ A Render Blueprint is provided at the repository root in `render.yaml`. It deplo
 3. Set the secret environment variables when prompted:
    - `KIMI_K3_API_KEY` — DSH agent model provider key (Moonshot Kimi K3).
    - `GEMINI_API_KEY` — used by Rails segmentation scripts.
-4. Render mounts a persistent disk at `/var`. `DSH_HOME` and `DSH_RAILS_WORK_ROOT` default to `/var/dsh-home` and `/var/dsh-rails` so sessions and cloned repos survive restarts.
+4. Render mounts a persistent disk at `/var/data`. `DSH_HOME` and `DSH_RAILS_WORK_ROOT` default to `/var/data/dsh-home` and `/var/data/dsh-rails` so sessions and cloned repos survive restarts. Do not mount the disk over `/var` itself: that hides the system's `/var` contents.
 5. After deploy, open the `https://<service>.onrender.com/?token=…` URL printed in the service log and run `rails_list_repos` in the chat.
 
-Render routes traffic only to a port bound on `0.0.0.0`, and the DSH webserver refuses wildcard bind addresses. `render-start.sh` therefore runs DSH on `127.0.0.1:$DSH_UPSTREAM_PORT` (default `3080`) and `render-proxy.mjs` on `0.0.0.0:$PORT`, forwarding HTTP and WebSocket traffic with its `Host` and `Origin` headers unchanged. DSH receives `--trusted-host $RENDER_EXTERNAL_HOSTNAME` so its `/api` fence admits the public hostname. The service is reachable from the internet; the access token in the log is its only credential.
+Render routes traffic only to a port bound on `0.0.0.0`, and the DSH webserver refuses wildcard bind addresses. `render-start.sh` therefore starts `render-proxy.mjs` on `0.0.0.0:$PORT` first, so Render's port scan finds the port while DSH is still starting, and runs DSH on `127.0.0.1:$DSH_UPSTREAM_PORT` (default `3080`) behind it. The relay forwards HTTP and WebSocket traffic with its `Host` and `Origin` headers unchanged. DSH receives `--trusted-host $RENDER_EXTERNAL_HOSTNAME` so its `/api` fence admits the public hostname. The service is reachable from the internet; the access token in the log is its only credential.
 
 ## Known Limitations and Deferred Work
 
