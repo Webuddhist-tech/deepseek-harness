@@ -11,8 +11,25 @@ import { connect } from 'node:net'
 const listenPort = Number(process.env.PORT ?? '10000')
 const upstreamHost = '127.0.0.1'
 const upstreamPort = Number(process.env.DSH_UPSTREAM_PORT ?? '3080')
+const publicHost = process.env.RENDER_EXTERNAL_HOSTNAME
+
+// Health results are logged only when they change, per source, so the deploy
+// log shows whether Render's checks arrive and what they receive without
+// repeating a line every few seconds.
+const lastHealth = new Map()
+function noteHealth(source, result) {
+  if (lastHealth.get(source) === result) return
+  lastHealth.set(source, result)
+  console.log(`render-proxy: ${source} GET /healthz -> ${result}`)
+}
+
+function healthSource(req) {
+  const address = req.socket.remoteAddress ?? ''
+  return address === '127.0.0.1' || address === '::ffff:127.0.0.1' ? 'self-check' : `external ${address}`
+}
 
 const server = createServer((req, res) => {
+  const isHealth = req.url === '/healthz' || req.url?.startsWith('/healthz?') === true
   const upstream = httpRequest({
     host: upstreamHost,
     port: upstreamPort,
@@ -20,10 +37,12 @@ const server = createServer((req, res) => {
     path: req.url,
     headers: req.headers,
   }, (upstreamRes) => {
+    if (isHealth) noteHealth(healthSource(req), String(upstreamRes.statusCode))
     res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.rawHeaders)
     upstreamRes.pipe(res)
   })
   upstream.on('error', (error) => {
+    if (isHealth) noteHealth(healthSource(req), `502 (dsh unreachable: ${error.code ?? error.message})`)
     if (!res.headersSent) {
       res.writeHead(502, { 'Content-Type': 'text/plain' })
       res.end(`dsh upstream unavailable: ${error.message}\n`)
@@ -49,8 +68,26 @@ server.on('upgrade', (req, socket, head) => {
   socket.on('error', () => upstream.destroy())
 })
 
+// Probe this relay's own /healthz with the public Host header until it
+// succeeds, so the log separates "DSH is not healthy" from "Render's checks
+// never arrive".
+function selfCheck() {
+  const probe = httpRequest({
+    host: '127.0.0.1',
+    port: listenPort,
+    path: '/healthz',
+    headers: publicHost === undefined ? {} : { host: publicHost },
+  }, (probeRes) => {
+    probeRes.resume()
+    if (probeRes.statusCode !== 200) setTimeout(selfCheck, 5000)
+  })
+  probe.on('error', () => setTimeout(selfCheck, 5000))
+  probe.end()
+}
+
 server.listen(listenPort, '0.0.0.0', () => {
-  console.log(`render-proxy: 0.0.0.0:${listenPort} -> ${upstreamHost}:${upstreamPort}`)
+  console.log(`render-proxy: listening on ${JSON.stringify(server.address())} -> ${upstreamHost}:${upstreamPort}`)
+  selfCheck()
 })
 
 for (const signal of ['SIGTERM', 'SIGINT']) {

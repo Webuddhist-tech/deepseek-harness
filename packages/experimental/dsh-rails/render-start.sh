@@ -31,6 +31,16 @@ DSH_PID=$!
 node packages/experimental/dsh-rails/render-proxy.mjs &
 PROXY_PID=$!
 
+# Print the listening sockets once DSH has had time to start, so the deploy
+# log shows what Render's port scan can see.
+(
+  sleep 60
+  if command -v ss >/dev/null 2>&1; then
+    echo "render-start: listening TCP sockets:"
+    ss -ltn
+  fi
+) &
+
 trap 'kill -TERM "$DSH_PID" "$PROXY_PID" 2>/dev/null || true' TERM INT
 
 # Exit as soon as either process stops so Render restarts the service.
