@@ -13,23 +13,24 @@ const upstreamHost = '127.0.0.1'
 const upstreamPort = Number(process.env.DSH_UPSTREAM_PORT ?? '3080')
 const publicHost = process.env.RENDER_EXTERNAL_HOSTNAME
 
-// Health results are logged only when they change, per source, so the deploy
-// log shows whether Render's checks arrive and what they receive without
-// repeating a line every few seconds.
-const lastHealth = new Map()
-function noteHealth(source, result) {
-  if (lastHealth.get(source) === result) return
-  lastHealth.set(source, result)
-  console.log(`render-proxy: ${source} GET /healthz -> ${result}`)
-}
+// The deploy log shows what reaches the relay and what it answers: each
+// peer's first connection, each request whose result changed since the last
+// one with the same peer, method, and path, and each unparseable request.
+// Every list is capped so a probe loop cannot flood the log.
+const LOG_LIMIT = 40
+const seenPeers = new Set()
+const lastResults = new Map()
+let unparseableLogged = 0
 
-function healthSource(req) {
-  const address = req.socket.remoteAddress ?? ''
-  return address === '127.0.0.1' || address === '::ffff:127.0.0.1' ? 'self-check' : `external ${address}`
+function logRequest(req, result, startedAt) {
+  const key = `${req.socket.remoteAddress} ${req.method} ${req.url}`
+  if (lastResults.get(key) === result || lastResults.size >= LOG_LIMIT) return
+  lastResults.set(key, result)
+  console.log(`render-proxy: ${key} host=${req.headers.host ?? '-'} -> ${result} (${Date.now() - startedAt}ms)`)
 }
 
 const server = createServer((req, res) => {
-  const isHealth = req.url === '/healthz' || req.url?.startsWith('/healthz?') === true
+  const startedAt = Date.now()
   const upstream = httpRequest({
     host: upstreamHost,
     port: upstreamPort,
@@ -37,12 +38,12 @@ const server = createServer((req, res) => {
     path: req.url,
     headers: req.headers,
   }, (upstreamRes) => {
-    if (isHealth) noteHealth(healthSource(req), String(upstreamRes.statusCode))
+    logRequest(req, String(upstreamRes.statusCode), startedAt)
     res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.rawHeaders)
     upstreamRes.pipe(res)
   })
   upstream.on('error', (error) => {
-    if (isHealth) noteHealth(healthSource(req), `502 (dsh unreachable: ${error.code ?? error.message})`)
+    logRequest(req, `502 (dsh unreachable: ${error.code ?? error.message})`, startedAt)
     if (!res.headersSent) {
       res.writeHead(502, { 'Content-Type': 'text/plain' })
       res.end(`dsh upstream unavailable: ${error.message}\n`)
@@ -53,14 +54,20 @@ const server = createServer((req, res) => {
   req.pipe(upstream)
 })
 
-// Render's port scan and health checks connect from outside the container; the
-// first connection from each address shows whether they arrive at all.
-const seenPeers = new Set()
 server.on('connection', (socket) => {
   const address = socket.remoteAddress ?? 'unknown'
-  if (address === '127.0.0.1' || address === '::ffff:127.0.0.1' || seenPeers.has(address) || seenPeers.size >= 20) return
+  if (seenPeers.has(address) || seenPeers.size >= LOG_LIMIT) return
   seenPeers.add(address)
   console.log(`render-proxy: first connection from ${address}`)
+})
+
+server.on('clientError', (error, socket) => {
+  if (unparseableLogged < LOG_LIMIT) {
+    unparseableLogged += 1
+    console.log(`render-proxy: unparseable request from ${socket.remoteAddress}: ${error.code ?? error.message}`)
+  }
+  if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n')
+  else socket.destroy()
 })
 
 server.on('upgrade', (req, socket, head) => {
@@ -79,8 +86,7 @@ server.on('upgrade', (req, socket, head) => {
 })
 
 // Probe this relay's own /healthz with the public Host header until it
-// succeeds, so the log separates "DSH is not healthy" from "Render's checks
-// never arrive".
+// succeeds; the request log then shows when DSH became healthy.
 function selfCheck() {
   const probe = httpRequest({
     host: '127.0.0.1',

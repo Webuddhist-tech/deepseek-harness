@@ -21,7 +21,9 @@ services:
     plan: standard
     buildCommand: pnpm install && pnpm run build
     startCommand: bash packages/experimental/dsh-rails/render-start.sh
-    healthCheckPath: /healthz
+    # No healthCheckPath: Render then probes the detected port over TCP, which
+    # the relay answers as soon as it listens. GET /healthz stays available for
+    # manual checks.
     envVars:
       - key: NODE_VERSION
         value: '22'

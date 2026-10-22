@@ -10,7 +10,9 @@ export DSH_RAILS_WORK_ROOT="${DSH_RAILS_WORK_ROOT:-/var/data/dsh-rails}"
 # relay starts first so Render's port scan finds the port before DSH is ready;
 # it answers 502 until DSH listens.
 export PORT="${PORT:-10000}"
-export DSH_UPSTREAM_PORT="${DSH_UPSTREAM_PORT:-3080}"
+# DSH listens above $PORT so a scanner that routes to the lowest open port
+# still picks the relay.
+export DSH_UPSTREAM_PORT="${DSH_UPSTREAM_PORT:-31080}"
 node packages/experimental/dsh-rails/render-proxy.mjs &
 PROXY_PID=$!
 DSH_PID=""
