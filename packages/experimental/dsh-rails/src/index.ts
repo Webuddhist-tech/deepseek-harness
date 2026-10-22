@@ -8,7 +8,7 @@ import { execFile } from 'node:child_process'
 import { access, mkdir, readdir, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import type { WebServer } from '@deepseek-ai/dsh-host-webserver'
+import type {} from '@deepseek-ai/dsh-host-webserver'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { BUNDLED_SKILL_RANK, type SkillProvider, type SkillCandidate } from '@deepseek-ai/dsh-skill'
 import z from '@deepseek-ai/schemastery'
@@ -63,9 +63,10 @@ export function apply(ctx: Context, config: Config = {}): void {
   const reposById = new Map(repos.map(repo => [repo.id, repo]))
   const subagentProvider = config.subagentProvider ?? DEFAULT_SUBAGENT_PROVIDER
 
-  const webServer = ctx.get('webServer') as WebServer | undefined
-  if (webServer !== undefined) {
-    ctx.effect(() => webServer.register({
+  // The webserver activates after this plugin applies, so a one-time
+  // ctx.get() would miss it; the injected scope registers once it exists.
+  ctx.inject(['webServer'], (scope) => {
+    scope.effect(() => scope.webServer.register({
       kind: 'exact',
       path: '/healthz',
       handler: (_req, res) => {
@@ -73,7 +74,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         res.end('ok')
       },
     }))
-  }
+  })
 
   ctx.tools.register(defineTool({
     name: 'rails_list_repos',

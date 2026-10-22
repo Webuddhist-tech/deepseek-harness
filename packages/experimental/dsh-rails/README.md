@@ -57,13 +57,15 @@ pnpm vitest run packages/experimental/dsh-rails/tests/rails.spec.ts
 
 A Render Blueprint is provided at the repository root in `render.yaml`. It deploys the DSH web profile with the Rails plugin patch applied.
 
-1. Push `render.yaml` and `packages/experimental/dsh-rails/render-start.sh` to your Git repository.
+1. Push `render.yaml`, `packages/experimental/dsh-rails/render-start.sh`, and `packages/experimental/dsh-rails/render-proxy.mjs` to your Git repository.
 2. In the Render dashboard, create a new Blueprint Instance and select the repository.
 3. Set the secret environment variables when prompted:
    - `KIMI_K3_API_KEY` — DSH agent model provider key (Moonshot Kimi K3).
    - `GEMINI_API_KEY` — used by Rails segmentation scripts.
 4. Render mounts a persistent disk at `/var`. `DSH_HOME` and `DSH_RAILS_WORK_ROOT` default to `/var/dsh-home` and `/var/dsh-rails` so sessions and cloned repos survive restarts.
-5. After deploy, open the printed URL and run `rails_list_repos` in the chat.
+5. After deploy, open the `https://<service>.onrender.com/?token=…` URL printed in the service log and run `rails_list_repos` in the chat.
+
+Render routes traffic only to a port bound on `0.0.0.0`, and the DSH webserver refuses wildcard bind addresses. `render-start.sh` therefore runs DSH on `127.0.0.1:$DSH_UPSTREAM_PORT` (default `3080`) and `render-proxy.mjs` on `0.0.0.0:$PORT`, forwarding HTTP and WebSocket traffic with its `Host` and `Origin` headers unchanged. DSH receives `--trusted-host $RENDER_EXTERNAL_HOSTNAME` so its `/api` fence admits the public hostname. The service is reachable from the internet; the access token in the log is its only credential.
 
 ## Known Limitations and Deferred Work
 

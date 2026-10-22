@@ -73,15 +73,17 @@ describe('dsh-rails', () => {
     expect(ctx.tools.get('rails_clone_repo')).toBeDefined()
   })
 
-  it('registers a public health check route when webServer is available', async () => {
+  it('registers a public health check route once webServer becomes available', async () => {
     type Route = { kind: 'exact' | 'prefix'; path: string; handler: (req: unknown, res: { writeHead: (status: number) => void; end: (body: string) => void }) => void }
     const register = vi.fn<(route: Route) => () => void>(() => () => {})
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(SkillRegistry)
-    ctx.provide('webServer', { register } as unknown as WebServer)
     await ctx.plugin(rails, { repos: [] })
+    expect(register).not.toHaveBeenCalled()
+    ctx.provide('webServer', { register } as unknown as WebServer)
+    await new Promise((resolve) => { setTimeout(resolve, 0) })
 
     expect(register).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'exact',
